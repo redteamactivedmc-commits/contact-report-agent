@@ -3,7 +3,6 @@ Active DMC Contact Report Agent — Web App
 Run with: streamlit run app.py
 """
 
-import os
 import re
 from datetime import datetime
 import streamlit as st
@@ -95,13 +94,12 @@ Now write the complete contact report following the exact format specified above
 """
 
 
-def generate_report(transcript: str) -> str:
-    api_key = os.environ.get("ANTHROPIC_API_KEY") or st.session_state.get("api_key", "")
-    if not api_key:
-        st.error("No API key found. Set ANTHROPIC_API_KEY or enter it in the sidebar.")
-        return ""
+def get_api_key() -> str:
+    return st.session_state.get("api_key", "").strip()
 
-    client = anthropic.Anthropic(api_key=api_key)
+
+def generate_report(transcript: str) -> str:
+    client = anthropic.Anthropic(api_key=get_api_key())
     prompt = PROMPT_TEMPLATE.format(meeting_data=transcript)
 
     output_placeholder = st.empty()
@@ -119,7 +117,7 @@ def generate_report(transcript: str) -> str:
         ],
     ) as stream:
         for event in stream:
-            # Only stream text deltas (skip thinking blocks)
+            # Only surface text deltas — skip thinking blocks
             if (
                 hasattr(event, "type")
                 and event.type == "content_block_delta"
@@ -127,66 +125,67 @@ def generate_report(transcript: str) -> str:
                 and getattr(event.delta, "type", "") == "text_delta"
             ):
                 full_text += event.delta.text
-                output_placeholder.markdown(
-                    f"```\n{full_text}\n```",
-                    unsafe_allow_html=False,
-                )
+                output_placeholder.markdown(f"```\n{full_text}\n```")
 
-    # Strip closing </contact_report> tag if present
+    # Strip the closing </contact_report> tag if Claude included it
     full_text = re.sub(r"\s*</contact_report>\s*$", "", full_text).strip()
     output_placeholder.empty()
     return full_text
 
 
-# ── Sidebar — API key ─────────────────────────────────────────────────────────
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.image(
-        "https://www.activedmc.com/wp-content/uploads/2022/06/Active-DMC-Logo.png",
-        use_column_width=True,
-    ) if False else st.markdown("## 📋 Active DMC")  # logo placeholder — replace URL if needed
-
+    st.markdown("## 📋 Active DMC")
     st.markdown("### Contact Report Agent")
-    st.markdown("Paste a meeting transcript and generate a polished client contact report.")
     st.divider()
 
-    env_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if env_key:
-        st.success("API key loaded from environment.", icon="✅")
+    st.markdown("**Anthropic API Key**")
+    api_key_input = st.text_input(
+        label="api_key_input",
+        type="password",
+        placeholder="sk-ant-api03-...",
+        value=st.session_state.get("api_key", ""),
+        label_visibility="collapsed",
+    )
+    if api_key_input:
+        st.session_state["api_key"] = api_key_input
+        st.success("Key saved for this session.", icon="✅")
     else:
-        manual_key = st.text_input(
-            "Anthropic API Key",
-            type="password",
-            placeholder="sk-ant-...",
-            help="Or set the ANTHROPIC_API_KEY environment variable.",
-        )
-        if manual_key:
-            st.session_state["api_key"] = manual_key
-            st.success("API key saved for this session.", icon="✅")
+        st.info("Enter your Anthropic API key above to get started.", icon="🔑")
 
     st.divider()
-    st.caption("Model: claude-opus-4-7 · Adaptive thinking")
+    st.caption("Model: claude-opus-4-7\nAdaptive thinking on")
 
 
 # ── Main UI ───────────────────────────────────────────────────────────────────
 st.title("Contact Report Agent")
-st.markdown("Paste your Read AI transcript or meeting notes below, then click **Generate Report**.")
+st.markdown(
+    "Paste your Read AI transcript or meeting notes below, then click **Generate Report**."
+)
 
 transcript = st.text_area(
-    label="Meeting transcript / notes",
+    label="transcript",
     placeholder=(
         "Paste the full Read AI report here — transcript, summary, action items, "
         "attendees, topics, or any combination."
     ),
-    height=320,
+    height=340,
     label_visibility="collapsed",
 )
 
-col1, col2 = st.columns([1, 5])
-with col1:
-    generate_clicked = st.button("Generate Report", type="primary", use_container_width=True)
-with col2:
-    if st.session_state.get("report"):
-        st.caption("✅ Report ready — copy from the box below or use the Download button.")
+col_btn, col_status = st.columns([1, 5])
+with col_btn:
+    generate_clicked = st.button(
+        "Generate Report",
+        type="primary",
+        use_container_width=True,
+        disabled=not get_api_key(),
+    )
+with col_status:
+    if not get_api_key():
+        st.caption("⬅ Enter your API key in the sidebar first.")
+    elif st.session_state.get("report"):
+        st.caption("✅ Report ready — copy from the box below or download.")
 
 st.divider()
 
@@ -195,16 +194,23 @@ if generate_clicked:
     if not transcript.strip():
         st.warning("Please paste a transcript before generating.")
     else:
-        with st.spinner("Generating contact report…"):
-            report = generate_report(transcript)
-        if report:
-            st.session_state["report"] = report
-            st.session_state["report_time"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+        try:
+            with st.spinner("Generating contact report…"):
+                report = generate_report(transcript)
+            if report:
+                st.session_state["report"] = report
+                st.session_state["report_time"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+        except anthropic.AuthenticationError:
+            st.error("Invalid API key. Please check the key in the sidebar and try again.")
+        except anthropic.APIConnectionError:
+            st.error("Could not reach the Anthropic API. Check your internet connection.")
+        except Exception as e:
+            st.error(f"Something went wrong: {e}")
 
 # ── Output ────────────────────────────────────────────────────────────────────
 if st.session_state.get("report"):
     report = st.session_state["report"]
-    ts     = st.session_state.get("report_time", "")
+    ts = st.session_state.get("report_time", "")
 
     st.subheader("Contact Report")
     if ts:
@@ -213,19 +219,22 @@ if st.session_state.get("report"):
     st.text_area(
         label="report_output",
         value=report,
-        height=520,
+        height=540,
         label_visibility="collapsed",
     )
 
-    filename = f"ADMC_ContactReport_{datetime.now().strftime('%Y-%m-%d_%H%M')}.txt"
-    st.download_button(
-        label="⬇ Download .txt",
-        data=report,
-        file_name=filename,
-        mime="text/plain",
-    )
-
-    if st.button("Clear & Start Over"):
-        st.session_state.pop("report", None)
-        st.session_state.pop("report_time", None)
-        st.rerun()
+    col_dl, col_clear, _ = st.columns([1, 1, 4])
+    with col_dl:
+        filename = f"ADMC_ContactReport_{datetime.now().strftime('%Y-%m-%d_%H%M')}.txt"
+        st.download_button(
+            label="⬇ Download .txt",
+            data=report,
+            file_name=filename,
+            mime="text/plain",
+            use_container_width=True,
+        )
+    with col_clear:
+        if st.button("Clear", use_container_width=True):
+            st.session_state.pop("report", None)
+            st.session_state.pop("report_time", None)
+            st.rerun()
