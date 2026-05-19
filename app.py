@@ -3,10 +3,13 @@ Active DMC Contact Report Agent — Web App
 Run with: streamlit run app.py
 """
 
+import io
 import re
 from datetime import datetime
 import streamlit as st
 import anthropic
+from docx import Document
+from docx.shared import Pt, Inches
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -92,6 +95,63 @@ Now write the complete contact report following the exact format specified above
 
 <contact_report>
 """
+
+
+def generate_docx(report_text: str) -> bytes:
+    doc = Document()
+    doc.styles["Normal"].font.name = "Calibri"
+    doc.styles["Normal"].font.size = Pt(11)
+
+    for line in report_text.split("\n"):
+        stripped = line.rstrip()
+
+        if not stripped:
+            doc.add_paragraph("")
+            continue
+
+        if stripped in ("Summary of Discussion", "Next Steps"):
+            p = doc.add_paragraph()
+            run = p.add_run(stripped)
+            run.bold = True
+            run.font.size = Pt(12)
+            continue
+
+        # Main bullets  •\t…
+        if stripped.startswith("•"):
+            content = stripped.lstrip("•").lstrip("\t").strip()
+            try:
+                p = doc.add_paragraph(style="List Bullet")
+                p.add_run(content)
+            except KeyError:
+                p = doc.add_paragraph()
+                p.paragraph_format.left_indent = Inches(0.25)
+                p.add_run(f"• {content}")
+            continue
+
+        # Sub-bullets  o\t…
+        if re.match(r"^o[\t ]", stripped):
+            content = stripped[1:].lstrip("\t").strip()
+            try:
+                p = doc.add_paragraph(style="List Bullet 2")
+                p.add_run(content)
+            except KeyError:
+                p = doc.add_paragraph()
+                p.paragraph_format.left_indent = Inches(0.5)
+                p.add_run(f"○ {content}")
+            continue
+
+        # Numbered owner lines  1.\t…  /  2.\t…
+        if re.match(r"^\d+\.\t", stripped):
+            p = doc.add_paragraph()
+            run = p.add_run(stripped.replace("\t", "  "))
+            run.bold = True
+            continue
+
+        doc.add_paragraph(stripped)
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
 
 
 def get_api_key() -> str:
@@ -225,12 +285,12 @@ if st.session_state.get("report"):
 
     col_dl, col_clear, _ = st.columns([1, 1, 4])
     with col_dl:
-        filename = f"ADMC_ContactReport_{datetime.now().strftime('%Y-%m-%d_%H%M')}.txt"
+        filename = f"ADMC_ContactReport_{datetime.now().strftime('%Y-%m-%d_%H%M')}.docx"
         st.download_button(
-            label="⬇ Download .txt",
-            data=report,
+            label="⬇ Download .docx",
+            data=generate_docx(report),
             file_name=filename,
-            mime="text/plain",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             use_container_width=True,
         )
     with col_clear:

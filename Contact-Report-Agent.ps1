@@ -188,17 +188,76 @@ $rawText    = ($textBlocks | ForEach-Object { $_.text }) -join ""
 $contactReport = $rawText -replace '\s*</contact_report>\s*$', '' |
                  ForEach-Object { $_.Trim() }
 
-# ── Step 4: Save report ───────────────────────────────────────────────────────
+# ── Step 4: Save report as .docx via Word COM ────────────────────────────────
 if (-not $OutputPath) {
     $safeName  = ($meetingTitle -replace '[\\/:*?"<>|]', '_').Trim()
     $datestamp = Get-Date -Format "yyyy-MM-dd"
-    $OutputPath = Join-Path "$env:USERPROFILE\Desktop" "ADMC_ContactReport_${safeName}_${datestamp}.txt"
+    $OutputPath = Join-Path "$env:USERPROFILE\Desktop" "ADMC_ContactReport_${safeName}_${datestamp}.docx"
 }
 
-$contactReport | Out-File -FilePath $OutputPath -Encoding utf8
+$word = New-Object -ComObject Word.Application
+$word.Visible = $false
+
+try {
+    $doc       = $word.Documents.Add()
+    $selection = $word.Selection
+
+    foreach ($line in $contactReport -split "`n") {
+        $trimmed = $line.TrimEnd()
+
+        if ($trimmed -eq "") {
+            $selection.Style = $doc.Styles("Normal")
+            $selection.TypeParagraph()
+            continue
+        }
+
+        if ($trimmed -eq "Summary of Discussion" -or $trimmed -eq "Next Steps") {
+            $selection.Style = $doc.Styles("Heading 2")
+            $selection.TypeText($trimmed)
+            $selection.TypeParagraph()
+            continue
+        }
+
+        if ($trimmed -match "^•") {
+            $selection.Style = $doc.Styles("List Bullet")
+            $selection.TypeText(($trimmed -replace '^•[\t ]*', ''))
+            $selection.TypeParagraph()
+            continue
+        }
+
+        if ($trimmed -match "^o[\t ]") {
+            $selection.Style = $doc.Styles("List Bullet 2")
+            $selection.TypeText(($trimmed -replace '^o[\t ]*', ''))
+            $selection.TypeParagraph()
+            continue
+        }
+
+        if ($trimmed -match "^\d+\.\t") {
+            $selection.Style = $doc.Styles("Normal")
+            $selection.Font.Bold = $true
+            $selection.TypeText(($trimmed -replace '\t', '  '))
+            $selection.Font.Bold = $false
+            $selection.TypeParagraph()
+            continue
+        }
+
+        $selection.Style = $doc.Styles("Normal")
+        $selection.TypeText($trimmed)
+        $selection.TypeParagraph()
+    }
+
+    # wdFormatXMLDocument = 12
+    $doc.SaveAs([ref]$OutputPath, [ref]12)
+    $doc.Close($false)
+}
+finally {
+    $word.Quit()
+    [System.Runtime.InteropServices.Marshal]::ReleaseComObject($word) | Out-Null
+}
+
 Write-Host "`nContact report saved:" -ForegroundColor Green
 Write-Host $OutputPath -ForegroundColor White
 
 if ($OpenAfterSave) {
-    Start-Process notepad $OutputPath
+    Start-Process $OutputPath
 }
