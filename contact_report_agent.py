@@ -250,16 +250,22 @@ def banner():
     print("=" * 70 + "\n")
 
 
-def get_api_key() -> str:
-    env = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if env:
-        print("  ✓ Using ANTHROPIC_API_KEY from environment\n")
-        return env
-    key = input("Anthropic API key: ").strip()
+def prompt_for_key() -> str:
+    key = input("Anthropic API key (starts with sk-ant-): ").strip()
     if not key:
         print("API key required.")
         sys.exit(1)
     return key
+
+
+def get_api_key(force_prompt: bool = False) -> str:
+    if not force_prompt:
+        env = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if env:
+            print("  ✓ Using ANTHROPIC_API_KEY from environment")
+            print("    (if this fails, you'll be asked to type a key)\n")
+            return env
+    return prompt_for_key()
 
 
 def collect_transcript() -> str:
@@ -291,16 +297,24 @@ def main():
 
     print("\n  Generating contact report…")
 
-    try:
-        report = generate_report(transcript, api_key)
-    except anthropic.AuthenticationError:
-        print("\n  ✗ Invalid API key. Please check and try again.")
-        sys.exit(1)
-    except anthropic.APIConnectionError:
-        print("\n  ✗ Could not reach Anthropic API. Check your internet connection.")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n  ✗ Error: {e}")
+    report = None
+    for attempt in range(3):
+        try:
+            report = generate_report(transcript, api_key)
+            break
+        except anthropic.AuthenticationError:
+            print("\n  ✗ That API key was rejected by Anthropic (invalid or out of credit).")
+            print("    Get a valid key at console.anthropic.com → API Keys.\n")
+            api_key = prompt_for_key()
+        except anthropic.APIConnectionError:
+            print("\n  ✗ Could not reach Anthropic API. Check your internet connection.")
+            sys.exit(1)
+        except Exception as e:
+            print(f"\n  ✗ Error: {e}")
+            sys.exit(1)
+
+    if report is None:
+        print("\n  ✗ Could not authenticate after 3 attempts. Exiting.")
         sys.exit(1)
 
     # Save .docx
