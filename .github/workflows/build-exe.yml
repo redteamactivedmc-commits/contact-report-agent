@@ -1,0 +1,45 @@
+name: Build Windows .exe
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install anthropic python-docx pyinstaller
+
+      - name: Build .exe
+        run: |
+          pyinstaller --onefile --windowed --name "ADMC_ContactReport" contact_report_gui.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ADMC_ContactReport_Windows
+          path: dist/ADMC_ContactReport.exe
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Active DMC Contact Report Agent"
+          body: |
+            ## Download
+            Click **ADMC_ContactReport.exe** below — double-click it to run. No installation needed.
+
+            **Requirements:** An Anthropic API key (enter it inside the app).
+          files: dist/ADMC_ContactReport.exe
+          make_latest: true
