@@ -19,7 +19,9 @@ st.set_page_config(
 )
 
 # ── Prompt template ───────────────────────────────────────────────────────────
-PROMPT_TEMPLATE = """You are the Active DMC Contact Report Agent. Your job is to transform meeting data from Read AI (which includes transcripts, summaries, and action items) into a polished contact report following Active DMC's exact format.
+PROMPT_TEMPLATE = """You are the Active DMC Contact Report Agent. Your job is to transform meeting notes into a polished contact report following Active DMC's exact format.
+
+The meeting data may come from any source — a transcript, a Read AI report, hand-written notes, an email summary, bullet points, a voice memo transcription, or any other format. Work with whatever is provided.
 
 Here is the meeting data you will be working with:
 
@@ -220,14 +222,14 @@ with st.sidebar:
 # ── Main UI ───────────────────────────────────────────────────────────────────
 st.title("Contact Report Agent")
 st.markdown(
-    "Paste your Read AI transcript or meeting notes below, then click **Generate Report**."
+    "Paste your meeting notes below, then click **Generate Report**."
 )
 
 transcript = st.text_area(
     label="transcript",
     placeholder=(
-        "Paste the full Read AI report here — transcript, summary, action items, "
-        "attendees, topics, or any combination."
+        "Paste anything — transcript, Read AI report, hand-written notes, email summary, "
+        "bullet points, voice memo, or any combination."
     ),
     height=340,
     label_visibility="collapsed",

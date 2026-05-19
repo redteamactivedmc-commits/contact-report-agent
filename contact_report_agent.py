@@ -44,7 +44,9 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 ADMC_FONT = "Trebuchet MS"
 
 # ── Prompt ────────────────────────────────────────────────────────────────────
-PROMPT_TEMPLATE = """You are the Active DMC Contact Report Agent. Your job is to transform meeting data from Read AI (which includes transcripts, summaries, and action items) into a polished contact report following Active DMC's exact format.
+PROMPT_TEMPLATE = """You are the Active DMC Contact Report Agent. Your job is to transform meeting notes into a polished contact report following Active DMC's exact format.
+
+The meeting data may come from any source — a transcript, a Read AI report, hand-written notes, an email summary, bullet points, a voice memo transcription, or any other format. Work with whatever is provided.
 
 Here is the meeting data you will be working with:
 
