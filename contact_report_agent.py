@@ -15,11 +15,26 @@ Requirements:
 from __future__ import annotations
 
 import io
-import os
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
+
+# ============================================================================
+#  >>> PASTE YOUR ANTHROPIC API KEY BETWEEN THE QUOTES ON THE NEXT LINE <<<
+#
+#  Get a key at:  console.anthropic.com  ->  API Keys  ->  Create Key
+#  Example:  API_KEY = "sk-ant-api03-abc123...."
+#
+#  This is the ONLY place the key is read from. The script will NOT ask
+#  you and will NOT use any old key saved on your computer.
+# ============================================================================
+
+API_KEY = ""
+
+# ============================================================================
+#  (Do not change anything below this line.)
+# ============================================================================
 
 try:
     import anthropic
@@ -250,22 +265,27 @@ def banner():
     print("=" * 70 + "\n")
 
 
-def prompt_for_key() -> str:
-    key = input("Anthropic API key (starts with sk-ant-): ").strip()
+def get_api_key() -> str:
+    key = API_KEY.strip()
     if not key:
-        print("API key required.")
+        print("\n" + "!" * 70)
+        print("  NO API KEY SET.")
+        print("!" * 70)
+        print("  Open this file (contact_report_agent.py) in Notepad,")
+        print("  find the line near the top that says:")
+        print()
+        print('      API_KEY = ""')
+        print()
+        print("  Paste your key between the quotes, for example:")
+        print()
+        print('      API_KEY = "sk-ant-api03-xxxxxxxx"')
+        print()
+        print("  Save the file, then run this script again.")
+        print("!" * 70 + "\n")
         sys.exit(1)
+    masked = key[:14] + "..." + key[-4:] if len(key) > 20 else "(set)"
+    print(f"  ✓ Using API key from this file: {masked}\n")
     return key
-
-
-def get_api_key(force_prompt: bool = False) -> str:
-    if not force_prompt:
-        env = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-        if env:
-            print("  ✓ Using ANTHROPIC_API_KEY from environment")
-            print("    (if this fails, you'll be asked to type a key)\n")
-            return env
-    return prompt_for_key()
 
 
 def collect_transcript() -> str:
@@ -297,24 +317,19 @@ def main():
 
     print("\n  Generating contact report…")
 
-    report = None
-    for attempt in range(3):
-        try:
-            report = generate_report(transcript, api_key)
-            break
-        except anthropic.AuthenticationError:
-            print("\n  ✗ That API key was rejected by Anthropic (invalid or out of credit).")
-            print("    Get a valid key at console.anthropic.com → API Keys.\n")
-            api_key = prompt_for_key()
-        except anthropic.APIConnectionError:
-            print("\n  ✗ Could not reach Anthropic API. Check your internet connection.")
-            sys.exit(1)
-        except Exception as e:
-            print(f"\n  ✗ Error: {e}")
-            sys.exit(1)
-
-    if report is None:
-        print("\n  ✗ Could not authenticate after 3 attempts. Exiting.")
+    try:
+        report = generate_report(transcript, api_key)
+    except anthropic.AuthenticationError:
+        print("\n  ✗ The API key in this file was rejected by Anthropic.")
+        print("    This means the key is wrong, or the Anthropic account")
+        print("    has no credit. Check console.anthropic.com → Billing,")
+        print("    then paste a fresh key into the API_KEY line in this file.")
+        sys.exit(1)
+    except anthropic.APIConnectionError:
+        print("\n  ✗ Could not reach Anthropic API. Check your internet connection.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n  ✗ Error: {e}")
         sys.exit(1)
 
     # Save .docx
