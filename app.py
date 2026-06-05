@@ -21,7 +21,7 @@ st.set_page_config(
 # ── Prompt template ───────────────────────────────────────────────────────────
 PROMPT_TEMPLATE = """You are the Active DMC Contact Report Agent. Your job is to transform meeting notes into a polished contact report following Active DMC's exact format.
 
-The meeting data may come from any source — a transcript, a Read AI report, hand-written notes, an email summary, bullet points, a voice memo transcription, or any other format. Work with whatever is provided.
+The meeting data may come from any source — a transcript, a Read AI report, hand-written notes, an email summary, bullet points, or any other format. Work with whatever is provided.
 
 Here is the meeting data you will be working with:
 
@@ -29,71 +29,67 @@ Here is the meeting data you will be working with:
 {meeting_data}
 </meeting_data>
 
-Your output must follow this exact structure:
+Your output must follow this EXACT structure — do not deviate:
 
-Hi [Client Name],
+Hi [First name of main client contact],
 
-Thanks for your time – following our discussion please see the contact report below.
+Sharing notes from our call today.
 
-Present on behalf of [Client Company]:                       [Client attendees]
+Present on behalf of [Client Company]:          [Client attendees, comma separated]
+Present on behalf of Active DMC:                [Active DMC attendees, comma separated]
+Date:                                           [Date, e.g. 3rd December 2025]
+Time:                                           [Time] UAE time
+Location:                                       [Teams / Zoom / In person]
 
-Present on behalf of Active DMC:                       [Active DMC attendees]
+Summary of Discussion and Next Steps
 
-Date:                                                                [Date]
+[Topic heading]:
+•\t[Discussion point]
+•\t[Discussion point]
+\to\t[Sub-point if needed]
 
-Time:                                                               [Time] UAE time
-
-Location:                                                          [Teams/Zoom/In person]
-
-Summary of Discussion
-
-•\t[Topic title]
-o\t[Summary point]
-o\t[Summary point]
-
-•\t[Topic title]
-o\t[Summary point]
-o\t[Summary point]
+[Topic heading]:
+•\t[Discussion point]
+•\t[Discussion point]
 
 Next Steps
 
-1.\tActive DMC
-o\t[Action point owned by Active DMC]
-o\t[Action point owned by Active DMC]
+For Active DMC:
+•\t[Action item owned by Active DMC]
+•\t[Action item owned by Active DMC]
 
-2.\t[Client Name/Client Company]
-o\t[Action point owned by client]
-o\t[Action point owned by client]
+For [Client Company]:
+•\t[Action item owned by client]
+•\t[Action item owned by client]
 
-Please let us know if we missed anything or if you have any questions.
+Let us know if we missed out on anything.
 
-Important rules to follow:
-
-- Follow the Active DMC contact report format exactly as shown above
-- Use "•" (bullet points) for main discussion topics and "o" (sub-bullets) for summary points under each topic
-- Use numbered lists (1., 2.) for Next Steps owners, then "o" for individual action items
-- Keep the tone professional, concise, and client-friendly
-- Extract and synthesize information from the meeting data; do not copy the transcript word-for-word
+Rules — follow these exactly:
+- Use "Hi [first name]," not the full name
+- Opening line: "Sharing notes from our call today." (or "Capturing action points from our call today." if the meeting was very action-focused)
+- The section heading is "Summary of Discussion and Next Steps" — one combined heading, NOT two separate headings
+- Under the summary, group points by TOPIC. Each topic heading ends with a colon (:) and is on its own line
+- Use • for main bullet points under each topic
+- Use o (indented) only for genuine sub-points under a bullet
+- The "Next Steps" sub-section is at the bottom, after all topics
+- Next Steps are split as "For Active DMC:" and "For [Client Company]:" — use bullet points, NOT numbered lists
+- Closing line is always: "Let us know if we missed out on anything."
+- Keep tone professional, concise, and client-friendly
 - Organize discussion points by topic, not chronologically
-- Preserve all specific details accurately: names, dates, deadlines, publications, clients, campaign details, deliverables, numbers, etc.
-- For action items, carefully determine whether Active DMC or the client is responsible and place them under the correct owner
-- If attendees, date, time, or location information is missing from the meeting data, use placeholders like "[Client Name]", "[Date]", "[Time]", or "[Location - Teams/Zoom/In person]"
+- Preserve all specific details: names, dates, deadlines, publications, clients, campaign details, numbers
+- Carefully assign each action item to the correct owner (Active DMC or client)
+- Use placeholders like [Date], [Time], [Location] only if the information is genuinely missing
 - Always specify "UAE time" after the time
-- Do not invent or assume information that is not present in the meeting data
-- Write this as a professional follow-up email, not a meeting transcript or verbatim summary
+- Do not invent information not present in the meeting data
 
-Before writing your final contact report, use the scratchpad below to:
-1. Identify the client name and company
-2. List attendees from both sides
-3. Extract meeting logistics (date, time, location)
-4. Identify main discussion topics and organize key points under each
-5. Extract action items and assign them to the correct owner (Active DMC or client)
+Before writing, think through:
+1. Client first name and company name
+2. All attendees from both sides
+3. Meeting date, time, location
+4. All topics discussed — group points under each topic
+5. All action items — who owns each one
 
-<scratchpad>
-[Your analysis and organization of the meeting data goes here]
-</scratchpad>
-
-Now write the complete contact report following the exact format specified above. Your final output should be the complete, polished contact report ready to send to the client - do not include the scratchpad in your final answer.
+Then write the complete contact report following the exact format above.
 
 <contact_report>
 """
@@ -111,11 +107,26 @@ def generate_docx(report_text: str) -> bytes:
             doc.add_paragraph("")
             continue
 
-        if stripped in ("Summary of Discussion", "Next Steps"):
+        # Section headings
+        if stripped in ("Summary of Discussion and Next Steps", "Next Steps"):
             p = doc.add_paragraph()
             run = p.add_run(stripped)
             run.bold = True
             run.font.size = Pt(12)
+            continue
+
+        # "For Active DMC:" / "For [Client]:" owner headings
+        if re.match(r"^For .+:$", stripped):
+            p = doc.add_paragraph()
+            run = p.add_run(stripped)
+            run.bold = True
+            continue
+
+        # Topic headings ending with colon (e.g. "Reporting:")
+        if stripped.endswith(":") and not stripped.startswith("•") and not stripped.startswith("o"):
+            p = doc.add_paragraph()
+            run = p.add_run(stripped)
+            run.bold = True
             continue
 
         # Main bullets  •\t…
@@ -140,13 +151,6 @@ def generate_docx(report_text: str) -> bytes:
                 p = doc.add_paragraph()
                 p.paragraph_format.left_indent = Inches(0.5)
                 p.add_run(f"○ {content}")
-            continue
-
-        # Numbered owner lines  1.\t…  /  2.\t…
-        if re.match(r"^\d+\.\t", stripped):
-            p = doc.add_paragraph()
-            run = p.add_run(stripped.replace("\t", "  "))
-            run.bold = True
             continue
 
         doc.add_paragraph(stripped)
