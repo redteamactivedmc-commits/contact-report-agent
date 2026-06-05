@@ -30,7 +30,7 @@ from pathlib import Path
 #  you and will NOT use any old key saved on your computer.
 # ============================================================================
 
-API_KEY = ""
+API_KEY = ""  # ← paste your key here between the quotes
 
 # ============================================================================
 #  (Do not change anything below this line.)
